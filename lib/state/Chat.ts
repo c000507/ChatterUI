@@ -115,6 +115,7 @@ export interface ChatState {
     stopGenerating: () => void
     startGenerating: (swipeId: number) => void
     summarizeChat: () => Promise<void>
+    isSummarizing: boolean
 }
 
 type InferenceStateType = {
@@ -188,6 +189,7 @@ export namespace Chats {
     export const useChatState = create<ChatState>((set, get: () => ChatState) => ({
         data: undefined,
         buffer: { data: '' },
+        isSummarizing: false,
         startGenerating: (swipeId: number) => {
             useInference.getState().startGenerating(swipeId)
         },
@@ -288,8 +290,8 @@ export namespace Chats {
             }))
 
             // Auto Summarization Check
-            const maxLen = mmkv.getInt(AppSettings.MaxConversationLength)
-            if (maxLen > 0) {
+            const maxLen = mmkv.getNumber(AppSettings.MaxConversationLength)
+            if (maxLen && maxLen > 0) {
                  // Check if total messages length exceeds maxLen (naive approach for now, usually it's tokens)
                  // The requirement says "max conversation setting, which indicates how long the messages should be"
                  // If it's number of messages:
@@ -536,8 +538,11 @@ export namespace Chats {
             db.mutate.renameChat(chatId, name)
         },
         summarizeChat: async () => {
+            if (get().isSummarizing) return
             const data = get().data
             if (!data) return
+
+            set({ isSummarizing: true })
 
             // 1. Check if we need to summarize
             // This function is manually called or auto-called.
@@ -556,6 +561,7 @@ export namespace Chats {
 
             if (unsummarizedMessages.length <= KEEP_RECENT) {
                  Logger.info("Not enough messages to summarize")
+                 set({ isSummarizing: false })
                  return
             }
 
@@ -571,6 +577,7 @@ export namespace Chats {
 
             if (newSummary === currentSummary) {
                 Logger.warn("Summary generation failed or returned no change. Skipping update.")
+                set({ isSummarizing: false })
                 return
             }
 
@@ -579,6 +586,7 @@ export namespace Chats {
 
             set((state) => ({
                 ...state,
+                isSummarizing: false,
                 data: state.data ? {
                     ...state.data,
                     summary: newSummary,

@@ -58,7 +58,7 @@ export const generateSummary = async (
 
     if (isChat) {
          constructedInput = [
-             { role: 'user', content: [{ type: 'text', text: fullPrompt }] }
+             { role: 'user', content: fullPrompt }
          ]
     }
 
