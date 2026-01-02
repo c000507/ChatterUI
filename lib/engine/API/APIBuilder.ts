@@ -33,6 +33,8 @@ export const buildAndSendRequest = async ({
     messageLoader,
     maxLength,
     cache,
+    summary,
+    summaryPoint
 }: APIBuilderParams) => {
     try {
         let payload: any = undefined
@@ -50,6 +52,8 @@ export const buildAndSendRequest = async ({
             maxLength,
             cache,
             bypassContextLength,
+            summary,
+            summaryPoint
         })
         if (prompt === undefined) {
             Logger.errorToast(`Prompt construction failed`)

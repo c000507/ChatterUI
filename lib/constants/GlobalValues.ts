@@ -141,12 +141,15 @@ export enum AppSettings {
     AutoGenerateTitle = 'settings-auto-generate-title',
     WideChatMode = 'settings-wide-chat-mode',
     AlternatingChatMode = 'settings-alternative-chat-mode',
+    SummarizationAPI = 'summarizationapi',
+    SummaryPrompt = 'summaryprompt',
+    MaxConversationLength = 'maxconversationlength',
 }
 
 /**
  * Default settings on first install
  */
-export const AppSettingsDefault: Record<AppSettings, boolean> = {
+export const AppSettingsDefault: Record<AppSettings, boolean | string | number> = {
     [AppSettings.AnimateEditor]: true,
     [AppSettings.AutoLoadLocal]: false,
     [AppSettings.AutoScroll]: true,
@@ -177,6 +180,10 @@ export const AppSettingsDefault: Record<AppSettings, boolean> = {
     [AppSettings.AutoGenerateTitle]: true,
     [AppSettings.WideChatMode]: false,
     [AppSettings.AlternatingChatMode]: false,
+    [AppSettings.SummarizationAPI]: '',
+    [AppSettings.SummaryPrompt]:
+        'Summarize the conversation so far, capturing key events and details.',
+    [AppSettings.MaxConversationLength]: 0,
 }
 
 export const CLAUDE_VERSION = '2023-06-01'

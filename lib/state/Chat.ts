@@ -26,6 +26,7 @@ import { Characters } from './Characters'
 import { Logger } from './Logger'
 import { AppSettings } from '../constants/GlobalValues'
 import { mmkv } from '../storage/MMKV'
+import { generateSummary } from '@lib/engine/Summarization'
 
 export interface ChatSwipeState extends ChatSwipe {
     token_count?: number
@@ -113,6 +114,8 @@ export interface ChatState {
     ) => Promise<number>
     stopGenerating: () => void
     startGenerating: (swipeId: number) => void
+    summarizeChat: () => Promise<void>
+    isSummarizing: boolean
 }
 
 type InferenceStateType = {
@@ -186,6 +189,7 @@ export namespace Chats {
     export const useChatState = create<ChatState>((set, get: () => ChatState) => ({
         data: undefined,
         buffer: { data: '' },
+        isSummarizing: false,
         startGenerating: (swipeId: number) => {
             useInference.getState().startGenerating(swipeId)
         },
@@ -284,6 +288,18 @@ export namespace Chats {
                 ...state,
                 data: state?.data ? { ...state.data, messages: [...messages] } : state.data,
             }))
+
+            // Auto Summarization Check
+            const maxLen = mmkv.getNumber(AppSettings.MaxConversationLength)
+            if (maxLen && maxLen > 0) {
+                 // Check if total messages length exceeds maxLen (naive approach for now, usually it's tokens)
+                 // The requirement says "max conversation setting, which indicates how long the messages should be"
+                 // If it's number of messages:
+                 if (messages.length > maxLen) {
+                      get().summarizeChat()
+                 }
+            }
+
             return entry?.swipes[0].id
         },
         deleteEntry: async (index: number) => {
@@ -521,6 +537,64 @@ export namespace Chats {
                 })
             db.mutate.renameChat(chatId, name)
         },
+        summarizeChat: async () => {
+            if (get().isSummarizing) return
+            const data = get().data
+            if (!data) return
+
+            set({ isSummarizing: true })
+
+            // 1. Check if we need to summarize
+            // This function is manually called or auto-called.
+            // If auto-called, the caller should check conditions.
+            // But we can check unsummarized length here too.
+
+            // Get unsummarized messages
+            const summaryPointId = data.summary_point_id || 0
+
+            // We want to keep some recent messages unsummarized to maintain context flow
+            // Let's say we keep last 5 messages or last N tokens.
+            // For now, keep last 4 messages.
+
+            const KEEP_RECENT = 4
+            const unsummarizedMessages = data.messages.filter(m => m.id > summaryPointId)
+
+            if (unsummarizedMessages.length <= KEEP_RECENT) {
+                 Logger.info("Not enough messages to summarize")
+                 set({ isSummarizing: false })
+                 return
+            }
+
+            const messagesToSummarize = unsummarizedMessages.slice(0, unsummarizedMessages.length - KEEP_RECENT)
+            const newSummaryPoint = messagesToSummarize[messagesToSummarize.length - 1].id
+
+            // 2. Generate Summary
+            const currentSummary = data.summary || ''
+            const prompt = mmkv.getString(AppSettings.SummaryPrompt) || "Summarize the conversation."
+
+            Logger.info("Generating summary...")
+            const newSummary = await generateSummary(messagesToSummarize, currentSummary, prompt)
+
+            if (newSummary === currentSummary) {
+                Logger.warn("Summary generation failed or returned no change. Skipping update.")
+                set({ isSummarizing: false })
+                return
+            }
+
+            // 3. Update DB and State
+            await db.mutate.updateChatSummary(data.id, newSummary, newSummaryPoint)
+
+            set((state) => ({
+                ...state,
+                isSummarizing: false,
+                data: state.data ? {
+                    ...state.data,
+                    summary: newSummary,
+                    summary_point_id: newSummaryPoint
+                } : undefined
+            }))
+            Logger.info("Summary updated.")
+        }
     }))
 
     export namespace db {
@@ -870,6 +944,13 @@ export namespace Chats {
                 await database
                     .update(chats)
                     .set({ scroll_offset: scrollOffset })
+                    .where(eq(chats.id, chatId))
+            }
+
+            export const updateChatSummary = async (chatId: number, summary: string, point: number) => {
+                 await database
+                    .update(chats)
+                    .set({ summary: summary, summary_point_id: point })
                     .where(eq(chats.id, chatId))
             }
         }

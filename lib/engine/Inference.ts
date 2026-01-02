@@ -264,6 +264,8 @@ async function obtainFields(): Promise<APIBuilderParams | void> {
                 characterCache: await userState.getCache(userCard.name),
                 instructCache: await instructState.getCache(characterCard.name, userCard.name),
             },
+            summary: chatState.data?.summary,
+            summaryPoint: chatState.data?.summary_point_id
         }
     } catch (e) {
         Logger.stackTrace(e)
