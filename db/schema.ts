@@ -102,6 +102,8 @@ export const chats = sqliteTable('chats', {
         .$onUpdateFn(() => Date.now()),
     name: text('name').notNull().default('New Chat'),
     scroll_offset: integer('scroll_offset', { mode: 'number' }).notNull().default(0),
+    summary: text('summary').notNull().default(''),
+    summary_point_id: integer('summary_point_id', { mode: 'number' }).notNull().default(0),
 })
 
 export const chatEntries = sqliteTable('chat_entries', {

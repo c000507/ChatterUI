@@ -35,6 +35,8 @@ export interface ContextBuilderParams {
     cache: TokenCache
     bypassContextLength?: boolean
     messageLoader?: MessageLoader
+    summary?: string
+    summaryPoint?: number
 }
 
 type ContentTypes =
@@ -71,6 +73,8 @@ export const buildChatCompletionContext = async ({
     maxLength,
     bypassContextLength,
     messageLoader,
+    summary,
+    summaryPoint
 }: ContextBuilderParams) => {
     const delta = performance.now()
 
@@ -100,6 +104,12 @@ export const buildChatCompletionContext = async ({
     const messageBuffer: Message[] = []
     let index = messages.length - 1
     for (const message of messages.reverse()) {
+        // Skip summarized messages
+        if (summaryPoint && message.id <= summaryPoint) {
+            index--
+            continue
+        }
+
         const swipe_data = message.swipes[message.swipe_id]
         // special case for claude, prefill may be useful!
         const timestamp_string = `[${swipe_data.send_date.toString().split(' ')[0]} ${swipe_data.send_date.toLocaleTimeString()}]\n`
@@ -185,6 +195,17 @@ export const buildChatCompletionContext = async ({
             [completionFeats.contentName]: apiValues.firstMessage,
         })
 
+    // Inject Summary
+    if (summary) {
+        // We inject summary after system prompt, or if system prompt is in payload[0], we can append.
+        // Or add as a separate system message.
+        // Generally "Previous conversation summary: ..."
+        payload.push({
+            role: completionFeats.systemRole,
+            [completionFeats.contentName]: `Previous conversation summary:\n${summary}`
+        })
+    }
+
     const output = [...payload, ...messageBuffer.reverse()]
     Logger.info(`Approximate Context Size: ${total_length} tokens`)
     Logger.info(`${(performance.now() - delta).toFixed(2)}ms taken to build context`)
@@ -206,6 +227,8 @@ export const buildTextCompletionContext = async ({
     maxLength,
     bypassContextLength,
     messageLoader,
+    summary,
+    summaryPoint
 }: ContextBuilderParams) => {
     const delta = performance.now()
 
@@ -239,6 +262,12 @@ export const buildTextCompletionContext = async ({
 
     // we require lengths for names if use_names is enabled
     for (const message of messages.reverse()) {
+        // Skip summarized messages
+        if (summaryPoint && message.id <= summaryPoint) {
+            index--
+            continue
+        }
+
         const swipe_len = await chatTokenizer(message, index)
         const swipe_data = message.swipes[message.swipe_id]
 
@@ -320,6 +349,11 @@ export const buildTextCompletionContext = async ({
     }
 
     payload += instruct.system_suffix
+
+    if (summary) {
+        payload += `\nPrevious conversation summary:\n${summary}\n`
+    }
+
     payload = replaceMacrosInternal(payload + message_acc, instruct)
 
     Logger.info(`Approximate Context Size: ${message_acc_length + payloadLength} tokens`)
